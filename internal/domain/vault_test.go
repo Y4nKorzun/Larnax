@@ -20,6 +20,34 @@ func TestNewVaultHasRootGroup(t *testing.T) {
 	}
 }
 
+func TestNewVaultFromRootPreservesIDAndNotes(t *testing.T) {
+	root := Group{ID: NewGroupID(), Name: "Root", Notes: "imported from personal.kdbx"}
+
+	v, err := NewVaultFromRoot(root)
+	if err != nil {
+		t.Fatalf("NewVaultFromRoot() error = %v", err)
+	}
+	if v.RootGroupID() != root.ID {
+		t.Errorf("RootGroupID() = %x, want %x", v.RootGroupID(), root.ID)
+	}
+	got, err := v.Group(v.RootGroupID())
+	if err != nil {
+		t.Fatalf("Group(RootGroupID()) error = %v", err)
+	}
+	if got.Notes != root.Notes {
+		t.Errorf("root.Notes = %q, want %q", got.Notes, root.Notes)
+	}
+}
+
+func TestNewVaultFromRootRejectsNonNilParent(t *testing.T) {
+	parent := NewGroupID()
+	root := Group{ID: NewGroupID(), ParentID: &parent}
+
+	if _, err := NewVaultFromRoot(root); !errors.Is(err, ErrRootMustHaveNoParent) {
+		t.Errorf("NewVaultFromRoot() error = %v, want %v", err, ErrRootMustHaveNoParent)
+	}
+}
+
 func TestAddGroupRequiresExistingParent(t *testing.T) {
 	v := NewVault("test vault")
 	group := NewGroup(NewGroupID(), "Personal") // parent not added to v

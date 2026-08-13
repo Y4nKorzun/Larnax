@@ -24,6 +24,23 @@ func NewVault(name string) *Vault {
 	}
 }
 
+// NewVaultFromRoot creates a Vault whose root group is exactly root,
+// including its ID and Notes, instead of minting a fresh root the way
+// NewVault does. This exists for reconstructing a Vault from an existing
+// KDBX file (spec section 15.4's round-trip preservation gate): the
+// file's root group identity must survive a decode, not be replaced by a
+// new one on every load.
+func NewVaultFromRoot(root Group) (*Vault, error) {
+	if root.ParentID != nil {
+		return nil, ErrRootMustHaveNoParent
+	}
+	return &Vault{
+		rootGroupID: root.ID,
+		groups:      map[GroupID]Group{root.ID: root},
+		entries:     map[EntryID]Entry{},
+	}, nil
+}
+
 func (v *Vault) RootGroupID() GroupID {
 	return v.rootGroupID
 }
