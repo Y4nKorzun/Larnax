@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/Y4nKorzun/Larnax/internal/domain"
 )
 
 // FieldName is the custom KDBX entry field this application reads and
@@ -52,4 +54,38 @@ func BuildURI(label, issuer string, params Params) string {
 		RawQuery: q.Encode(),
 	}
 	return u.String()
+}
+
+// EntryURI returns the otpauth:// URI stored in entry's TOTP custom
+// field (FieldName) and whether one was present at all. It only reveals
+// the field's Secret long enough to copy out the URI string, the same
+// pattern kdbx's own mapper.go uses for Password and every other secret
+// custom field.
+func EntryURI(entry domain.Entry) (uri string, present bool, err error) {
+	for _, f := range entry.CustomFields {
+		if f.Name != FieldName {
+			continue
+		}
+		err = f.Value.Reveal(func(value []byte) error {
+			uri = string(value)
+			return nil
+		})
+		return uri, true, err
+	}
+	return "", false, nil
+}
+
+// SetEntryURI returns a copy of entry with its TOTP custom field (spec
+// section 14.1: "add an otpauth:// URI") set to uri, replacing any
+// existing one. domain.Entry is a value type, so this does not mutate
+// the entry passed in.
+func SetEntryURI(entry domain.Entry, uri string) domain.Entry {
+	updated := make([]domain.Field, 0, len(entry.CustomFields)+1)
+	for _, f := range entry.CustomFields {
+		if f.Name != FieldName {
+			updated = append(updated, f)
+		}
+	}
+	entry.CustomFields = append(updated, domain.Field{Name: FieldName, Value: domain.NewSecretFromString(uri)})
+	return entry
 }
