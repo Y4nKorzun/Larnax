@@ -38,6 +38,7 @@ type browserOverlay int
 const (
 	browserOverlayNone browserOverlay = iota
 	browserOverlayAddEntry
+	browserOverlayConfirmDelete
 )
 
 // BrowserModel is the minimal spec section 8 main screen reached after a
@@ -62,8 +63,10 @@ type BrowserModel struct {
 	keys          KeySequence
 	leaderPending bool
 
-	overlay  browserOverlay
-	addEntry AddEntryModel
+	overlay         browserOverlay
+	addEntry        AddEntryModel
+	confirm         components.ConfirmModel
+	pendingDeleteID domain.EntryID
 
 	revealedEntryID domain.EntryID
 	revealedUntil   time.Time
@@ -126,8 +129,11 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 	m.Lock = false
 	m.Quit = false
 
-	if m.overlay == browserOverlayAddEntry {
+	switch m.overlay {
+	case browserOverlayAddEntry:
 		return m.updateAddEntryOverlay(msg)
+	case browserOverlayConfirmDelete:
+		return m.updateConfirmDeleteOverlay(msg)
 	}
 
 	if _, ok := msg.(revealTickMsg); ok {
@@ -229,6 +235,46 @@ func (m BrowserModel) handleAction(action Action) (BrowserModel, tea.Cmd) {
 		m.list = m.list.First()
 	case ActionCopyUsername, ActionCopyPassword, ActionCopyURL, ActionCopyNotes:
 		m.setCopyIntent(action)
+	case ActionDelete:
+		return m.startDelete()
+	}
+	return m, nil
+}
+
+// startDelete opens spec section 9.5's type-to-confirm dialog for the
+// selected entry. There is no recycle bin yet (spec 9.5's "default" —
+// move there instead of deleting outright — is P1 scope), so confirming
+// here is a real, permanent delete, which is exactly why it demands the
+// full typed phrase rather than a bare y/n.
+func (m BrowserModel) startDelete() (BrowserModel, tea.Cmd) {
+	entry, ok := m.SelectedEntry()
+	if !ok {
+		return m, nil
+	}
+	m.pendingDeleteID = entry.ID
+	m.confirm = components.NewConfirmModel(
+		fmt.Sprintf("Permanently delete %q and its history?", entry.Title),
+		"delete",
+	)
+	m.overlay = browserOverlayConfirmDelete
+	return m, nil
+}
+
+func (m BrowserModel) updateConfirmDeleteOverlay(msg tea.Msg) (BrowserModel, tea.Cmd) {
+	m.confirm, _ = m.confirm.Update(msg)
+
+	if m.confirm.Cancelled {
+		m.overlay = browserOverlayNone
+		return m, nil
+	}
+	if m.confirm.Confirmed {
+		if entry, err := m.service.Vault().Entry(m.pendingDeleteID); err == nil {
+			if err := m.service.DeleteEntry(entry); err != nil {
+				m.StatusMessage = err.Error()
+			}
+		}
+		m.overlay = browserOverlayNone
+		return m.refresh(), nil
 	}
 	return m, nil
 }
@@ -327,8 +373,12 @@ func (m BrowserModel) updateAddEntryOverlay(msg tea.Msg) (BrowserModel, tea.Cmd)
 }
 
 func (m BrowserModel) View() string {
-	if m.overlay == browserOverlayAddEntry {
+	switch m.overlay {
+	case browserOverlayAddEntry:
 		return m.addEntry.View()
+	case browserOverlayConfirmDelete:
+		return m.confirm.View()
+	default:
+		return m.list.View() + "\n" + m.detailView() + "\n" + m.StatusLine() + "\n"
 	}
-	return m.list.View() + "\n" + m.detailView() + "\n" + m.StatusLine() + "\n"
 }

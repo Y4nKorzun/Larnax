@@ -408,3 +408,95 @@ func TestBrowserModelRevealOnEmptyVaultIsNoop(t *testing.T) {
 		t.Error("isRevealed() = true on an empty vault")
 	}
 }
+
+func TestBrowserModelDDOpensDeleteConfirm(t *testing.T) {
+	service := newBrowserTestService(t)
+	if err := service.AddEntry(domain.NewEntry(service.Vault().RootGroupID(), "GitHub")); err != nil {
+		t.Fatalf("AddEntry() error = %v", err)
+	}
+
+	m := NewBrowserModel(service, random.CryptoSource{})
+	m, _ = m.Update(tea.KeyPressMsg{Text: "d"})
+	m, _ = m.Update(tea.KeyPressMsg{Text: "d"})
+
+	if m.overlay != browserOverlayConfirmDelete {
+		t.Fatalf("overlay = %v, want browserOverlayConfirmDelete", m.overlay)
+	}
+	if !strings.Contains(m.View(), `"GitHub"`) {
+		t.Errorf("confirm view missing the entry title; view:\n%s", m.View())
+	}
+}
+
+func TestBrowserModelDeleteConfirmedRemovesEntry(t *testing.T) {
+	service := newBrowserTestService(t)
+	entry := domain.NewEntry(service.Vault().RootGroupID(), "GitHub")
+	if err := service.AddEntry(entry); err != nil {
+		t.Fatalf("AddEntry() error = %v", err)
+	}
+
+	m := NewBrowserModel(service, random.CryptoSource{})
+	m, _ = m.Update(tea.KeyPressMsg{Text: "d"})
+	m, _ = m.Update(tea.KeyPressMsg{Text: "d"})
+	for _, r := range "delete" {
+		m, _ = m.Update(tea.KeyPressMsg{Text: string(r)})
+	}
+
+	if m.overlay != browserOverlayNone {
+		t.Fatalf("overlay = %v, want browserOverlayNone after confirming", m.overlay)
+	}
+	if len(service.Vault().AllEntries()) != 0 {
+		t.Errorf("vault has %d entries after confirmed delete, want 0", len(service.Vault().AllEntries()))
+	}
+	if _, err := service.Vault().Entry(entry.ID); err == nil {
+		t.Error("deleted entry is still present in the vault")
+	}
+}
+
+func TestBrowserModelDeleteEscCancelsWithoutRemoving(t *testing.T) {
+	service := newBrowserTestService(t)
+	if err := service.AddEntry(domain.NewEntry(service.Vault().RootGroupID(), "GitHub")); err != nil {
+		t.Fatalf("AddEntry() error = %v", err)
+	}
+
+	m := NewBrowserModel(service, random.CryptoSource{})
+	m, _ = m.Update(tea.KeyPressMsg{Text: "d"})
+	m, _ = m.Update(tea.KeyPressMsg{Text: "d"})
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	if m.overlay != browserOverlayNone {
+		t.Errorf("overlay = %v, want browserOverlayNone after Esc", m.overlay)
+	}
+	if len(service.Vault().AllEntries()) != 1 {
+		t.Errorf("vault has %d entries after cancelled delete, want 1", len(service.Vault().AllEntries()))
+	}
+}
+
+func TestBrowserModelDeleteTypoDoesNotRemove(t *testing.T) {
+	service := newBrowserTestService(t)
+	if err := service.AddEntry(domain.NewEntry(service.Vault().RootGroupID(), "GitHub")); err != nil {
+		t.Fatalf("AddEntry() error = %v", err)
+	}
+
+	m := NewBrowserModel(service, random.CryptoSource{})
+	m, _ = m.Update(tea.KeyPressMsg{Text: "d"})
+	m, _ = m.Update(tea.KeyPressMsg{Text: "d"})
+	for _, r := range "delet" { // incomplete
+		m, _ = m.Update(tea.KeyPressMsg{Text: string(r)})
+	}
+
+	if len(service.Vault().AllEntries()) != 1 {
+		t.Errorf("vault has %d entries after an incomplete confirmation, want 1", len(service.Vault().AllEntries()))
+	}
+}
+
+func TestBrowserModelDDOnEmptyVaultIsNoop(t *testing.T) {
+	service := newBrowserTestService(t)
+	m := NewBrowserModel(service, random.CryptoSource{})
+
+	m, _ = m.Update(tea.KeyPressMsg{Text: "d"})
+	m, _ = m.Update(tea.KeyPressMsg{Text: "d"})
+
+	if m.overlay != browserOverlayNone {
+		t.Errorf("overlay = %v, want browserOverlayNone (nothing to delete)", m.overlay)
+	}
+}
