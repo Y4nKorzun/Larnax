@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Y4nKorzun/Larnax/internal/application"
+	"github.com/Y4nKorzun/Larnax/internal/infrastructure/clipboard"
 	"github.com/Y4nKorzun/Larnax/internal/infrastructure/random"
 	"github.com/Y4nKorzun/Larnax/internal/tui"
 )
@@ -65,8 +66,10 @@ func runInteractive(positional []string, stderr io.Writer) int {
 		unlockPath = positional[0]
 	}
 
+	cb, _ := clipboard.New() // nil, ok=false on a platform with no adapter yet; AppModel handles that
+
 	var service application.VaultService
-	model := tui.NewAppModel(random.CryptoSource{}, &service, unlockPath)
+	model := tui.NewAppModel(random.CryptoSource{}, &service, unlockPath, cb)
 
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		fmt.Fprintln(stderr, "kdbx-tui:", err)
