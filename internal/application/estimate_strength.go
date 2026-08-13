@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
+
+	"github.com/Y4nKorzun/Larnax/internal/infrastructure/random/wordlist"
 )
 
 // StrengthLevel is a rough, honest classification of how hard a
@@ -57,6 +59,14 @@ func EstimateGeneratedStrength(unitCount, spaceSize int, unitNoun, spaceNoun str
 func EstimatePasswordStrength(policy PasswordPolicy) GeneratedStrength {
 	spaceSize := len(strings.Join(classAlphabets(policy), ""))
 	return EstimateGeneratedStrength(policy.Length, spaceSize, "character", "alphabet")
+}
+
+// EstimatePassphraseStrength computes strength for a passphrase generated
+// by GeneratePassphrase under policy, using the actual loaded wordlist
+// size so it can never drift out of sync with what GeneratePassphrase
+// draws from.
+func EstimatePassphraseStrength(policy PassphrasePolicy) GeneratedStrength {
+	return EstimateGeneratedStrength(policy.WordCount, len(wordlist.EFFLarge), "word", "wordlist")
 }
 
 // strengthLevel's boundaries are this project's own judgment call — spec
