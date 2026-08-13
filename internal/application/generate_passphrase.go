@@ -34,10 +34,17 @@ func GeneratePassphrase(src random.Source, policy PassphrasePolicy) (domain.Secr
 		return nil, ErrPassphraseWordCountTooLow
 	}
 
-	words := make([]string, policy.WordCount)
+	return domain.NewSecretFromString(strings.Join(drawWords(src, policy.WordCount), "-")), nil
+}
+
+// drawWords picks n independent, uniformly random words from the EFF
+// Long Wordlist. Shared by GeneratePassphrase above and
+// GenerateMasterPassphraseWithWords (master_passphrase.go), which needs
+// the individual words themselves rather than only the joined result.
+func drawWords(src random.Source, n int) []string {
+	words := make([]string, n)
 	for i := range words {
 		words[i] = wordlist.EFFLarge[src.Intn(len(wordlist.EFFLarge))]
 	}
-
-	return domain.NewSecretFromString(strings.Join(words, "-")), nil
+	return words
 }

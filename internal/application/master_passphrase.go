@@ -2,6 +2,7 @@ package application
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/Y4nKorzun/Larnax/internal/domain"
 	"github.com/Y4nKorzun/Larnax/internal/infrastructure/random"
@@ -52,4 +53,33 @@ func GenerateMasterPassphrase(src random.Source, strength MasterPassphraseStreng
 // GeneratePassphrase's own requirement that wordCount be at least 1.
 func GenerateMasterPassphraseUnsafe(src random.Source, wordCount int) (domain.Secret, error) {
 	return GeneratePassphrase(src, PassphrasePolicy{WordCount: wordCount})
+}
+
+// GeneratedMasterPassphrase is spec section 7.5's canonical joined
+// passphrase together with the individual words that make it up.
+// Confirming recovery (spec 7.6) needs to address a specific word by
+// position ("Word #3: ________"), and recovering that by splitting Phrase
+// on "-" is not reliable — a few wordlist entries ("drop-down",
+// "t-shirt", ...) contain a hyphen themselves. Words exists so no caller
+// ever has to split Phrase to find them.
+type GeneratedMasterPassphrase struct {
+	Phrase domain.Secret
+	Words  []string
+}
+
+// GenerateMasterPassphraseWithWords is GenerateMasterPassphrase, but also
+// returning the individual words spec section 7.6's recovery
+// confirmation step addresses by position.
+func GenerateMasterPassphraseWithWords(src random.Source, strength MasterPassphraseStrength) (GeneratedMasterPassphrase, error) {
+	switch strength {
+	case MasterPassphraseStrong, MasterPassphraseRecommended, MasterPassphraseMaximum:
+	default:
+		return GeneratedMasterPassphrase{}, ErrUnsafeMasterPassphraseStrength
+	}
+
+	words := drawWords(src, int(strength))
+	return GeneratedMasterPassphrase{
+		Phrase: domain.NewSecretFromString(strings.Join(words, "-")),
+		Words:  words,
+	}, nil
 }
