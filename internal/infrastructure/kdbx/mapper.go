@@ -161,6 +161,34 @@ func entryFromGKP(ge gokeepasslib.Entry) domain.Entry {
 	return e
 }
 
+// groupToGKP converts a domain.Group into a gokeepasslib.Group with no
+// children — decoder.go and encoder.go (a later piece of work) place it
+// into the tree using domain.Group.ParentID / the source tree position.
+//
+// internal/domain.Group carries no timestamps (unlike Entry), so Times is
+// always stamped with the current time rather than preserved from a
+// decoded file. That is a known round-trip gap in the domain model, not
+// something this function can paper over.
+func groupToGKP(g domain.Group) gokeepasslib.Group {
+	return gokeepasslib.Group{
+		UUID:  gokeepasslib.UUID(g.ID),
+		Name:  g.Name,
+		Notes: g.Notes,
+		Times: gokeepasslib.NewTimeData(),
+	}
+}
+
+// groupFromGKP converts a decoded gokeepasslib.Group into a domain.Group
+// with ParentID left nil. decoder.go fills that in from the group's
+// position in the source tree, which this function never sees.
+func groupFromGKP(gg gokeepasslib.Group) domain.Group {
+	return domain.Group{
+		ID:    domain.GroupID(gg.UUID),
+		Name:  gg.Name,
+		Notes: gg.Notes,
+	}
+}
+
 // splitTags reverses strings.Join(tags, tagSeparator), dropping empty
 // segments so an entry with no tags decodes back to a nil slice rather
 // than []string{""}.
