@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Y4nKorzun/Larnax/internal/application"
@@ -8,6 +10,12 @@ import (
 	"github.com/Y4nKorzun/Larnax/internal/infrastructure/random"
 	"github.com/Y4nKorzun/Larnax/internal/tui/components"
 )
+
+// passwordMask is what the detail view shows for a hidden password
+// (spec section 8.5: hidden by default). It is a fixed width rather than
+// sized to the actual password's length, so the detail view doesn't leak
+// how long a password is just by looking at it.
+const passwordMask = "••••••••"
 
 type browserOverlay int
 
@@ -202,6 +210,33 @@ func (m BrowserModel) selectedID() (domain.EntryID, bool) {
 	return m.ids[m.list.Cursor], true
 }
 
+// SelectedEntry returns the entry at the list cursor, if any.
+func (m BrowserModel) SelectedEntry() (domain.Entry, bool) {
+	id, ok := m.selectedID()
+	if !ok {
+		return domain.Entry{}, false
+	}
+	entry, err := m.service.Vault().Entry(id)
+	if err != nil {
+		return domain.Entry{}, false
+	}
+	return entry, true
+}
+
+// detailView renders spec 8.1's "Details" panel for the currently
+// selected entry — Password always shown as passwordMask here; task
+// 54's timed reveal (spec 8.5) is separate, later work.
+func (m BrowserModel) detailView() string {
+	entry, ok := m.SelectedEntry()
+	if !ok {
+		return "(no entry selected)\n"
+	}
+	return fmt.Sprintf(
+		"Title:    %s\nUsername: %s\nPassword: %s\nURL:      %s\nNotes:    %s\n",
+		entry.Title, entry.Username, passwordMask, entry.URL, entry.Notes,
+	)
+}
+
 func (m BrowserModel) updateAddEntryOverlay(msg tea.Msg) (BrowserModel, tea.Cmd) {
 	m.addEntry, _ = m.addEntry.Update(msg)
 
@@ -223,5 +258,5 @@ func (m BrowserModel) View() string {
 	if m.overlay == browserOverlayAddEntry {
 		return m.addEntry.View()
 	}
-	return m.list.View() + "\n" + m.StatusLine() + "\n"
+	return m.list.View() + "\n" + m.detailView() + "\n" + m.StatusLine() + "\n"
 }

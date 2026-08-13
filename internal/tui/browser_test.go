@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -230,5 +231,64 @@ func TestBrowserModelStatusLineShowsEntryCount(t *testing.T) {
 
 	if got := m.StatusLine(); got == "" {
 		t.Error("StatusLine() is empty")
+	}
+}
+
+func TestBrowserModelSelectedEntryReturnsCurrentEntry(t *testing.T) {
+	service := newBrowserTestService(t)
+	entry := domain.NewEntry(service.Vault().RootGroupID(), "GitHub")
+	entry.Username = "octocat"
+	if err := service.AddEntry(entry); err != nil {
+		t.Fatalf("AddEntry() error = %v", err)
+	}
+
+	m := NewBrowserModel(service, random.CryptoSource{})
+	got, ok := m.SelectedEntry()
+	if !ok {
+		t.Fatal("SelectedEntry() ok = false")
+	}
+	if got.ID != entry.ID {
+		t.Errorf("SelectedEntry().ID = %x, want %x", got.ID, entry.ID)
+	}
+}
+
+func TestBrowserModelSelectedEntryOnEmptyVaultReturnsFalse(t *testing.T) {
+	service := newBrowserTestService(t)
+	m := NewBrowserModel(service, random.CryptoSource{})
+
+	if _, ok := m.SelectedEntry(); ok {
+		t.Error("SelectedEntry() ok = true for an empty vault")
+	}
+}
+
+func TestBrowserModelDetailViewShowsFieldsWithMaskedPassword(t *testing.T) {
+	service := newBrowserTestService(t)
+	entry := domain.NewEntry(service.Vault().RootGroupID(), "GitHub")
+	entry.Username = "octocat"
+	entry.URL = "https://github.com"
+	entry.Password = domain.NewSecretFromString("hunter2")
+	if err := service.AddEntry(entry); err != nil {
+		t.Fatalf("AddEntry() error = %v", err)
+	}
+
+	m := NewBrowserModel(service, random.CryptoSource{})
+	view := m.View()
+
+	for _, want := range []string{"Title:    GitHub", "Username: octocat", "URL:      https://github.com", passwordMask} {
+		if !strings.Contains(view, want) {
+			t.Errorf("View() missing %q; full view:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "hunter2") {
+		t.Error("View() leaked the plaintext password")
+	}
+}
+
+func TestBrowserModelDetailViewNoSelection(t *testing.T) {
+	service := newBrowserTestService(t)
+	m := NewBrowserModel(service, random.CryptoSource{})
+
+	if got := m.detailView(); got != "(no entry selected)\n" {
+		t.Errorf("detailView() = %q, want %q", got, "(no entry selected)\n")
 	}
 }
