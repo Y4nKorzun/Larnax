@@ -7,17 +7,19 @@ package tui
 type Action string
 
 const (
-	ActionFirstItem    Action = "first-item"    // gg
-	ActionDelete       Action = "delete"        // dd
-	ActionCopyUsername Action = "copy-username" // yu
-	ActionCopyPassword Action = "copy-password" // yp
-	ActionCopyURL      Action = "copy-url"      // yU
-	ActionCopyNotes    Action = "copy-notes"    // yn
-	ActionCopyTOTP     Action = "copy-totp"     // yt
+	ActionFirstItem     Action = "first-item"     // gg
+	ActionDelete        Action = "delete"         // dd
+	ActionCopyUsername  Action = "copy-username"  // yu
+	ActionCopyPassword  Action = "copy-password"  // yp
+	ActionCopyURL       Action = "copy-url"       // yU
+	ActionCopyNotes     Action = "copy-notes"     // yn
+	ActionCopyTOTP      Action = "copy-totp"      // yt
+	ActionOpenGenerator Action = "open-generator" // gp
 )
 
 var sequenceActions = map[[2]rune]Action{
 	{'g', 'g'}: ActionFirstItem,
+	{'g', 'p'}: ActionOpenGenerator,
 	{'d', 'd'}: ActionDelete,
 	{'y', 'u'}: ActionCopyUsername,
 	{'y', 'p'}: ActionCopyPassword,

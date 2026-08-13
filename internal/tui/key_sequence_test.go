@@ -24,6 +24,7 @@ func TestKeySequenceCompletesTwoKeySequences(t *testing.T) {
 		wantAction Action
 	}{
 		{"gg", 'g', 'g', ActionFirstItem},
+		{"gp", 'g', 'p', ActionOpenGenerator},
 		{"dd", 'd', 'd', ActionDelete},
 		{"yu", 'y', 'u', ActionCopyUsername},
 		{"yp", 'y', 'p', ActionCopyPassword},
