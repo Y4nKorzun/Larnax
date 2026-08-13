@@ -2,7 +2,10 @@ module github.com/Y4nKorzun/Larnax
 
 go 1.26.5
 
-require github.com/tobischo/gokeepasslib/v3 v3.7.0
+require (
+	github.com/BurntSushi/toml v1.6.0
+	github.com/tobischo/gokeepasslib/v3 v3.7.0
+)
 
 require (
 	github.com/tobischo/argon2 v0.1.0 // indirect

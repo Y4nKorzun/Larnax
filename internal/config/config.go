@@ -1,6 +1,6 @@
 // Package config defines the application's local, non-secret settings
-// (spec section 21). Loading from a TOML file on disk is separate, later
-// work — this is the struct shape, defaults, and validation.
+// (spec section 21): the struct shape, defaults, and validation here,
+// TOML load/save in loader.go, and the default file location in paths.go.
 package config
 
 import (
