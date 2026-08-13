@@ -11,9 +11,16 @@ import (
 	"github.com/Y4nKorzun/Larnax/internal/infrastructure/random/wordlist"
 )
 
+// TestGeneratePassphraseWordCount uses fixedIndexSource (defined in
+// master_passphrase_test.go) rather than a real random source: the EFF
+// Long Wordlist contains a handful of hyphenated entries ("drop-down",
+// "t-shirt", ...), so counting words by splitting the joined result on
+// "-" is unreliable with a genuinely random choice of words — it would
+// make this test flaky in proportion to how often a hyphenated word gets
+// drawn, instead of deterministically correct.
 func TestGeneratePassphraseWordCount(t *testing.T) {
-	src := random.CryptoSource{}
-	secret, err := GeneratePassphrase(src, PassphrasePolicy{WordCount: 8})
+	idx := nonHyphenatedWordIndex(t)
+	secret, err := GeneratePassphrase(fixedIndexSource(idx), PassphrasePolicy{WordCount: 8})
 	if err != nil {
 		t.Fatalf("GeneratePassphrase() error = %v", err)
 	}
@@ -25,20 +32,28 @@ func TestGeneratePassphraseWordCount(t *testing.T) {
 	}
 }
 
+// TestGeneratePassphraseWordsAreFromWordlist uses fixedIndexSource for
+// the same reason TestGeneratePassphraseWordCount does: splitting the
+// joined result on "-" to recover individual words is only unambiguous
+// when none of the drawn words themselves contain a hyphen.
 func TestGeneratePassphraseWordsAreFromWordlist(t *testing.T) {
-	src := random.CryptoSource{}
+	idx := nonHyphenatedWordIndex(t)
+	word := wordlist.EFFLarge[idx]
 	set := make(map[string]bool, len(wordlist.EFFLarge))
 	for _, w := range wordlist.EFFLarge {
 		set[w] = true
 	}
 
-	secret, err := GeneratePassphrase(src, PassphrasePolicy{WordCount: 12})
+	secret, err := GeneratePassphrase(fixedIndexSource(idx), PassphrasePolicy{WordCount: 12})
 	if err != nil {
 		t.Fatalf("GeneratePassphrase() error = %v", err)
 	}
 	got := revealBytes(t, secret)
 
 	for _, w := range strings.Split(string(got), "-") {
+		if w != word {
+			t.Errorf("word %q != expected fixed word %q", w, word)
+		}
 		if !set[w] {
 			t.Errorf("word %q is not in the EFF wordlist", w)
 		}
@@ -67,9 +82,16 @@ func TestGeneratePassphraseRejectsNonPositiveWordCount(t *testing.T) {
 	}
 }
 
+// TestGeneratePassphraseSingleWordHasNoHyphen uses fixedIndexSource
+// rather than a real random source: a genuinely random single word could
+// legitimately land on one of the wordlist's own hyphenated entries
+// ("drop-down", "t-shirt", ...), which is correct WordCount:1 behavior,
+// not a bug — this test is specifically about GeneratePassphrase not
+// adding a hyphen of its own for a single word, so it needs a word that
+// has none to begin with.
 func TestGeneratePassphraseSingleWordHasNoHyphen(t *testing.T) {
-	src := random.CryptoSource{}
-	secret, err := GeneratePassphrase(src, PassphrasePolicy{WordCount: 1})
+	idx := nonHyphenatedWordIndex(t)
+	secret, err := GeneratePassphrase(fixedIndexSource(idx), PassphrasePolicy{WordCount: 1})
 	if err != nil {
 		t.Fatalf("GeneratePassphrase() error = %v", err)
 	}
