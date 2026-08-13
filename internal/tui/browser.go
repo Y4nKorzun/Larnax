@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -16,6 +17,21 @@ import (
 // sized to the actual password's length, so the detail view doesn't leak
 // how long a password is just by looking at it.
 const passwordMask = "••••••••"
+
+// revealDuration is spec section 8.5's own example ("shows it for a
+// limited time, e.g. 5 seconds"). config.SecurityConfig.RevealTimeout is
+// the configurable version of this same value; nothing yet loads
+// config.toml at startup to wire it through, so this stays the fixed
+// spec example until that exists.
+const revealDuration = 5 * time.Second
+
+// revealTickMsg drives the "Auto-hide in Ns" countdown: while an entry's
+// password is revealed, BrowserModel reschedules one of these every
+// second so View() gets called again and re-evaluates isRevealed against
+// the current time, purely to force a redraw — the actual hide decision
+// never depends on receiving a tick, only on m.now() versus
+// revealedUntil, so a dropped or delayed tick can't extend a reveal.
+type revealTickMsg struct{}
 
 type browserOverlay int
 
@@ -49,6 +65,10 @@ type BrowserModel struct {
 	overlay  browserOverlay
 	addEntry AddEntryModel
 
+	revealedEntryID domain.EntryID
+	revealedUntil   time.Time
+	now             func() time.Time
+
 	CopyIntent    *CopyFieldIntent
 	Save          bool
 	Lock          bool
@@ -59,7 +79,7 @@ type BrowserModel struct {
 // NewBrowserModel returns a BrowserModel over service's currently open
 // vault.
 func NewBrowserModel(service *application.VaultService, src random.Source) BrowserModel {
-	m := BrowserModel{service: service, src: src}
+	m := BrowserModel{service: service, src: src, now: time.Now}
 	return m.refresh()
 }
 
@@ -110,6 +130,10 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 		return m.updateAddEntryOverlay(msg)
 	}
 
+	if _, ok := msg.(revealTickMsg); ok {
+		return m, m.rescheduleRevealTick()
+	}
+
 	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return m, nil
@@ -147,10 +171,46 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 	case "q":
 		m.Quit = true
 		return m, nil
+	case "r":
+		return m.reveal()
 	}
 
 	m.list, _ = m.list.Update(msg)
 	return m, nil
+}
+
+// reveal shows the selected entry's password for revealDuration (spec
+// section 8.5). It is keyed to the specific entry ID, not just a time
+// window: navigating to a different entry within that window must never
+// inherit the reveal — isRevealed checks both.
+func (m BrowserModel) reveal() (BrowserModel, tea.Cmd) {
+	id, ok := m.selectedID()
+	if !ok {
+		return m, nil
+	}
+	m.revealedEntryID = id
+	m.revealedUntil = m.now().Add(revealDuration)
+	return m, m.rescheduleRevealTick()
+}
+
+// isRevealed reports whether the currently selected entry's password
+// should be shown in plaintext right now.
+func (m BrowserModel) isRevealed() bool {
+	if m.revealedUntil.IsZero() || !m.now().Before(m.revealedUntil) {
+		return false
+	}
+	id, ok := m.selectedID()
+	return ok && id == m.revealedEntryID
+}
+
+// rescheduleRevealTick returns a Cmd that sends another revealTickMsg
+// in a second, or nil once nothing is revealed anymore — so the tick
+// train stops on its own instead of ticking forever in the background.
+func (m BrowserModel) rescheduleRevealTick() tea.Cmd {
+	if !m.isRevealed() {
+		return nil
+	}
+	return tea.Tick(time.Second, func(time.Time) tea.Msg { return revealTickMsg{} })
 }
 
 func (m BrowserModel) handleLeaderKey(key tea.KeyPressMsg) (BrowserModel, tea.Cmd) {
@@ -224,16 +284,28 @@ func (m BrowserModel) SelectedEntry() (domain.Entry, bool) {
 }
 
 // detailView renders spec 8.1's "Details" panel for the currently
-// selected entry — Password always shown as passwordMask here; task
-// 54's timed reveal (spec 8.5) is separate, later work.
+// selected entry, matching spec 8.5's reveal format
+// ("Password: qA8$...xP2" / "Auto-hide in 4s") while isRevealed holds.
 func (m BrowserModel) detailView() string {
 	entry, ok := m.SelectedEntry()
 	if !ok {
 		return "(no entry selected)\n"
 	}
+
+	passwordLine := "Password: " + passwordMask
+	if m.isRevealed() {
+		var plain string
+		_ = entry.Password.Reveal(func(v []byte) error {
+			plain = string(v)
+			return nil
+		})
+		remaining := int(m.revealedUntil.Sub(m.now()).Round(time.Second) / time.Second)
+		passwordLine = fmt.Sprintf("Password: %s\nAuto-hide in %ds", plain, remaining)
+	}
+
 	return fmt.Sprintf(
-		"Title:    %s\nUsername: %s\nPassword: %s\nURL:      %s\nNotes:    %s\n",
-		entry.Title, entry.Username, passwordMask, entry.URL, entry.Notes,
+		"Title:    %s\nUsername: %s\n%s\nURL:      %s\nNotes:    %s\n",
+		entry.Title, entry.Username, passwordLine, entry.URL, entry.Notes,
 	)
 }
 

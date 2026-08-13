@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -290,5 +291,120 @@ func TestBrowserModelDetailViewNoSelection(t *testing.T) {
 
 	if got := m.detailView(); got != "(no entry selected)\n" {
 		t.Errorf("detailView() = %q, want %q", got, "(no entry selected)\n")
+	}
+}
+
+func TestBrowserModelRevealShowsPlaintextAndCountdown(t *testing.T) {
+	service := newBrowserTestService(t)
+	entry := domain.NewEntry(service.Vault().RootGroupID(), "GitHub")
+	entry.Password = domain.NewSecretFromString("hunter2")
+	if err := service.AddEntry(entry); err != nil {
+		t.Fatalf("AddEntry() error = %v", err)
+	}
+
+	m := NewBrowserModel(service, random.CryptoSource{})
+	fixed := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return fixed }
+
+	m, cmd := m.Update(tea.KeyPressMsg{Text: "r"})
+	if cmd == nil {
+		t.Fatal("Update() for 'r' returned a nil Cmd (want a reveal tick scheduled)")
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "Password: hunter2") {
+		t.Errorf("View() missing revealed password; full view:\n%s", view)
+	}
+	if !strings.Contains(view, "Auto-hide in 5s") {
+		t.Errorf("View() missing countdown; full view:\n%s", view)
+	}
+}
+
+func TestBrowserModelRevealHidesAgainAfterTimeout(t *testing.T) {
+	service := newBrowserTestService(t)
+	entry := domain.NewEntry(service.Vault().RootGroupID(), "GitHub")
+	entry.Password = domain.NewSecretFromString("hunter2")
+	if err := service.AddEntry(entry); err != nil {
+		t.Fatalf("AddEntry() error = %v", err)
+	}
+
+	m := NewBrowserModel(service, random.CryptoSource{})
+	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return start }
+	m, _ = m.Update(tea.KeyPressMsg{Text: "r"})
+
+	// Time moves past the reveal window.
+	m.now = func() time.Time { return start.Add(6 * time.Second) }
+
+	view := m.View()
+	if strings.Contains(view, "hunter2") {
+		t.Error("password still shown after the reveal window elapsed")
+	}
+	if !strings.Contains(view, passwordMask) {
+		t.Error("password not masked again after the reveal window elapsed")
+	}
+}
+
+func TestBrowserModelRevealTickStopsOnceHidden(t *testing.T) {
+	service := newBrowserTestService(t)
+	entry := domain.NewEntry(service.Vault().RootGroupID(), "GitHub")
+	if err := service.AddEntry(entry); err != nil {
+		t.Fatalf("AddEntry() error = %v", err)
+	}
+
+	m := NewBrowserModel(service, random.CryptoSource{})
+	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return start }
+	m, _ = m.Update(tea.KeyPressMsg{Text: "r"})
+
+	m.now = func() time.Time { return start.Add(6 * time.Second) }
+	_, cmd := m.Update(revealTickMsg{})
+
+	if cmd != nil {
+		t.Error("rescheduleRevealTick returned a non-nil Cmd after the reveal window elapsed, want the tick train to stop")
+	}
+}
+
+func TestBrowserModelRevealDoesNotLeakToADifferentEntry(t *testing.T) {
+	service := newBrowserTestService(t)
+	first := domain.NewEntry(service.Vault().RootGroupID(), "GitHub")
+	first.Password = domain.NewSecretFromString("first-secret")
+	second := domain.NewEntry(service.Vault().RootGroupID(), "GitLab")
+	second.Password = domain.NewSecretFromString("second-secret")
+	if err := service.AddEntry(first); err != nil {
+		t.Fatalf("AddEntry(first) error = %v", err)
+	}
+	if err := service.AddEntry(second); err != nil {
+		t.Fatalf("AddEntry(second) error = %v", err)
+	}
+
+	m := NewBrowserModel(service, random.CryptoSource{})
+	fixed := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return fixed }
+
+	m, _ = m.Update(tea.KeyPressMsg{Text: "r"}) // reveal whichever entry is selected first
+	revealedFirst := m.list.Titles[m.list.Cursor]
+
+	m, _ = m.Update(tea.KeyPressMsg{Text: "j"}) // move to the other entry, still within the window
+	view := m.View()
+
+	if strings.Contains(view, "first-secret") || strings.Contains(view, "second-secret") {
+		t.Errorf("navigating to a different entry within the reveal window leaked a password (revealed was %q); view:\n%s", revealedFirst, view)
+	}
+	if !strings.Contains(view, passwordMask) {
+		t.Error("the newly selected entry's password is not masked")
+	}
+}
+
+func TestBrowserModelRevealOnEmptyVaultIsNoop(t *testing.T) {
+	service := newBrowserTestService(t)
+	m := NewBrowserModel(service, random.CryptoSource{})
+
+	m, cmd := m.Update(tea.KeyPressMsg{Text: "r"})
+	if cmd != nil {
+		t.Error("Update() for 'r' on an empty vault returned a non-nil Cmd")
+	}
+	if m.isRevealed() {
+		t.Error("isRevealed() = true on an empty vault")
 	}
 }
