@@ -314,3 +314,40 @@ func TestMoveGroupSucceeds(t *testing.T) {
 		t.Errorf("ChildGroups(workB) = %d, want 1", len(v.ChildGroups(workB.ID)))
 	}
 }
+
+func TestAllEntriesReturnsEntriesFromEveryGroup(t *testing.T) {
+	v := NewVault("test vault")
+	child := NewGroup(v.RootGroupID(), "Work")
+	if err := v.AddGroup(child); err != nil {
+		t.Fatalf("AddGroup() error = %v", err)
+	}
+
+	rootEntry := NewEntry(v.RootGroupID(), "Root Entry")
+	if err := v.AddEntry(rootEntry); err != nil {
+		t.Fatalf("AddEntry(rootEntry) error = %v", err)
+	}
+	childEntry := NewEntry(child.ID, "Child Entry")
+	if err := v.AddEntry(childEntry); err != nil {
+		t.Fatalf("AddEntry(childEntry) error = %v", err)
+	}
+
+	got := v.AllEntries()
+	if len(got) != 2 {
+		t.Fatalf("AllEntries() returned %d entries, want 2", len(got))
+	}
+
+	ids := map[EntryID]bool{}
+	for _, e := range got {
+		ids[e.ID] = true
+	}
+	if !ids[rootEntry.ID] || !ids[childEntry.ID] {
+		t.Errorf("AllEntries() = %v, want it to include both %x and %x", got, rootEntry.ID, childEntry.ID)
+	}
+}
+
+func TestAllEntriesEmptyVaultReturnsEmpty(t *testing.T) {
+	v := NewVault("test vault")
+	if got := v.AllEntries(); len(got) != 0 {
+		t.Errorf("AllEntries() = %v, want empty", got)
+	}
+}

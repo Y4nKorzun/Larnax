@@ -172,6 +172,20 @@ func (v *Vault) ChildGroups(parent GroupID) []Group {
 	return children
 }
 
+// AllEntries returns every entry in the vault, in no particular order and
+// regardless of which group holds it. Vault already keeps entries in a
+// flat map (see the type's own doc comment), so unlike EntriesIn this
+// needs no group tree walk — it exists for callers like lock (spec
+// section 17.2) that must reach every entry's secret, not just one
+// group's.
+func (v *Vault) AllEntries() []Entry {
+	entries := make([]Entry, 0, len(v.entries))
+	for _, e := range v.entries {
+		entries = append(entries, e)
+	}
+	return entries
+}
+
 // EntriesIn returns the entries directly inside group, in no particular
 // order.
 func (v *Vault) EntriesIn(group GroupID) []Entry {
