@@ -58,6 +58,13 @@ type ParseResult struct {
 	// column-mapping wizard (a later, TUI-layer concern) instead of
 	// guessing at column meaning.
 	UnknownSchema bool
+	// PasskeyCount is set when the header looks like a passkey export
+	// (see DetectPasskeyHeader in passkeys.go) rather than a password
+	// export — spec section 13.8's "unsupported credential types"
+	// warning. Always 0 when UnknownSchema is false: a header that
+	// mapped Title and Password successfully is a password export by
+	// definition.
+	PasskeyCount int
 }
 
 // Parse reads a Google Password Manager CSV export from r (spec sections
@@ -99,6 +106,9 @@ func Parse(r io.Reader) (ParseResult, error) {
 
 	columnIndex, ok := mapHeader(header)
 	if !ok {
+		if DetectPasskeyHeader(header) {
+			return ParseResult{UnknownSchema: true, PasskeyCount: countDataRows(csvReader)}, nil
+		}
 		return ParseResult{UnknownSchema: true}, nil
 	}
 
