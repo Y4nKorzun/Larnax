@@ -1,6 +1,7 @@
 package kdbx
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -35,11 +36,85 @@ func openVault(t *testing.T, path, password string) *Document {
 	}
 	defer f.Close()
 
-	doc, err := Open(f, gokeepasslib.NewPasswordCredentials(password))
+	doc, err := Open(f, password)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
 	return doc
+}
+
+func TestNewDocumentAppliesGivenProfile(t *testing.T) {
+	root := domain.Group{ID: domain.NewGroupID(), Name: "My Vault"}
+	vault, err := domain.NewVaultFromRoot(root)
+	if err != nil {
+		t.Fatalf("NewVaultFromRoot() error = %v", err)
+	}
+
+	doc, err := NewDocument(vault, repoTestPassword, PortableProfile())
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+
+	if !doc.Database.Header.IsKdbx41() {
+		t.Error("NewDocument() did not produce a KDBX 4.1 database")
+	}
+	params := doc.Database.Header.FileHeaders.KdfParameters
+	profile := PortableProfile()
+	if params.Parallelism != uint32(profile.Parallelism) {
+		t.Errorf("Parallelism = %d, want %d", params.Parallelism, profile.Parallelism)
+	}
+	if params.Memory != uint64(profile.MemoryKiB)*1024 {
+		t.Errorf("Memory = %d bytes, want %d", params.Memory, uint64(profile.MemoryKiB)*1024)
+	}
+	if params.Iterations != uint64(profile.Iterations) {
+		t.Errorf("Iterations = %d, want %d", params.Iterations, profile.Iterations)
+	}
+	if doc.Database.Content.Meta.DatabaseName != "My Vault" {
+		t.Errorf("DatabaseName = %q, want %q", doc.Database.Content.Meta.DatabaseName, "My Vault")
+	}
+}
+
+func TestNewDocumentRejectsInvalidProfile(t *testing.T) {
+	root := domain.Group{ID: domain.NewGroupID(), Name: "My Vault"}
+	vault, err := domain.NewVaultFromRoot(root)
+	if err != nil {
+		t.Fatalf("NewVaultFromRoot() error = %v", err)
+	}
+
+	if _, err := NewDocument(vault, repoTestPassword, Argon2Profile{}); !errors.Is(err, ErrParallelismTooLow) {
+		t.Errorf("NewDocument() with zero profile error = %v, want %v", err, ErrParallelismTooLow)
+	}
+}
+
+func TestNewDocumentThenSaveThenOpenRoundTrips(t *testing.T) {
+	root := domain.Group{ID: domain.NewGroupID(), Name: "My Vault"}
+	vault, err := domain.NewVaultFromRoot(root)
+	if err != nil {
+		t.Fatalf("NewVaultFromRoot() error = %v", err)
+	}
+	entry := domain.NewEntry(root.ID, "GitHub")
+	entry.Password = domain.NewSecretFromString("hunter2")
+	if err := vault.AddEntry(entry); err != nil {
+		t.Fatalf("AddEntry() error = %v", err)
+	}
+
+	doc, err := NewDocument(vault, repoTestPassword, PortableProfile())
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "vault.kdbx")
+	writeVault(t, path, doc)
+
+	reopened := openVault(t, path, repoTestPassword)
+
+	got, err := reopened.Vault.Entry(entry.ID)
+	if err != nil {
+		t.Fatalf("Entry() error = %v", err)
+	}
+	if got.Title != "GitHub" {
+		t.Errorf("Title = %q, want %q", got.Title, "GitHub")
+	}
 }
 
 func TestSaveThenOpenRoundTrips(t *testing.T) {
@@ -106,7 +181,7 @@ func TestOpenRejectsWrongPassword(t *testing.T) {
 	}
 	defer f.Close()
 
-	if _, err := Open(f, gokeepasslib.NewPasswordCredentials("wrong password")); err == nil {
+	if _, err := Open(f, "wrong password"); err == nil {
 		t.Error("Open() with wrong password succeeded, want error")
 	}
 }
