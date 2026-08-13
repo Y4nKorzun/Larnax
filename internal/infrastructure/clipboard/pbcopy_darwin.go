@@ -36,3 +36,17 @@ func (DarwinClipboard) ReadText(ctx context.Context) ([]byte, error) {
 func (c DarwinClipboard) Clear(ctx context.Context) error {
 	return c.WriteText(ctx, nil)
 }
+
+// platformClipboard backs New/Available (available.go) on macOS: a
+// DarwinClipboard is available exactly when both pbcopy and pbpaste are
+// on PATH, which is true on every real macOS install but worth checking
+// rather than assuming.
+func platformClipboard() (Clipboard, bool) {
+	if _, err := exec.LookPath("pbcopy"); err != nil {
+		return nil, false
+	}
+	if _, err := exec.LookPath("pbpaste"); err != nil {
+		return nil, false
+	}
+	return DarwinClipboard{}, true
+}

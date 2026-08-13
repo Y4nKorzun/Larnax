@@ -137,3 +137,15 @@ func TestDarwinClipboardClearIfOwnedDoesNotClearReplacedValue(t *testing.T) {
 		t.Errorf("ClearIfOwned() cleared a replaced value: got %q", got)
 	}
 }
+
+func TestPlatformClipboardOnDarwin(t *testing.T) {
+	requirePasteboardTools(t)
+
+	cb, ok := New()
+	if !ok {
+		t.Fatal("New() ok = false, want true when pbcopy/pbpaste are on PATH")
+	}
+	if _, isDarwin := cb.(DarwinClipboard); !isDarwin {
+		t.Errorf("New() returned %T, want DarwinClipboard", cb)
+	}
+}
