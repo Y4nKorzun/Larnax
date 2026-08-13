@@ -1,6 +1,9 @@
 package tui
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Additional Action values for spec section 8.3's single-key and
 // <Leader>-prefixed bindings. ActionFirstItem, ActionDelete,
@@ -129,6 +132,37 @@ func ApplyOverrides(base Keymap, overrides map[string]Action) (Keymap, error) {
 		return nil, ErrNoLockBinding
 	}
 	return merged, nil
+}
+
+// ErrUnknownAction is returned by ResolveKeymap for an override naming an
+// action string that matches nothing in the base keymap.
+var ErrUnknownAction = errors.New("tui: keymap override names an unknown action")
+
+// ResolveKeymap converts config-layer raw overrides — key string to
+// action *name* (e.g. from a TOML [keymap] table: config.Config.Keymap
+// is a map[string]string precisely so that package never has to import
+// this one) — into a Keymap layered on top of base via ApplyOverrides.
+//
+// It rejects any override naming an action string that doesn't match one
+// of base's own action values, extending spec 21.3's "checks conflicts"
+// to catch a typo'd or unknown action name, not just a missing emergency
+// binding (which ApplyOverrides already checks).
+func ResolveKeymap(base Keymap, rawOverrides map[string]string) (Keymap, error) {
+	known := make(map[Action]bool, len(base))
+	for _, action := range base {
+		known[action] = true
+	}
+
+	overrides := make(map[string]Action, len(rawOverrides))
+	for key, actionName := range rawOverrides {
+		action := Action(actionName)
+		if !known[action] {
+			return nil, fmt.Errorf("%w: %q", ErrUnknownAction, actionName)
+		}
+		overrides[key] = action
+	}
+
+	return ApplyOverrides(base, overrides)
 }
 
 func (km Keymap) hasBinding(action Action) bool {

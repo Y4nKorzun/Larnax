@@ -112,3 +112,50 @@ func TestApplyOverridesAllowsMovingQuitToADifferentKey(t *testing.T) {
 		t.Errorf(`merged["Ctrl+c"] = %q, want %q`, merged["Ctrl+c"], ActionQuit)
 	}
 }
+
+func TestResolveKeymapConvertsActionNames(t *testing.T) {
+	base := DefaultKeymap()
+	raw := map[string]string{"j": "search-start"}
+
+	merged, err := ResolveKeymap(base, raw)
+	if err != nil {
+		t.Fatalf("ResolveKeymap() error = %v", err)
+	}
+	if merged["j"] != ActionSearchStart {
+		t.Errorf(`merged["j"] = %q, want %q`, merged["j"], ActionSearchStart)
+	}
+}
+
+func TestResolveKeymapRejectsUnknownActionName(t *testing.T) {
+	base := DefaultKeymap()
+	raw := map[string]string{"j": "not-a-real-action"}
+
+	if _, err := ResolveKeymap(base, raw); !errors.Is(err, ErrUnknownAction) {
+		t.Errorf("ResolveKeymap() error = %v, want %v", err, ErrUnknownAction)
+	}
+}
+
+func TestResolveKeymapStillEnforcesEmergencyBindings(t *testing.T) {
+	base := DefaultKeymap()
+	raw := map[string]string{"q": "down"} // renames the only quit binding away
+
+	if _, err := ResolveKeymap(base, raw); !errors.Is(err, ErrNoQuitBinding) {
+		t.Errorf("ResolveKeymap() error = %v, want %v", err, ErrNoQuitBinding)
+	}
+}
+
+func TestResolveKeymapEmptyOverridesReturnsBaseEquivalent(t *testing.T) {
+	base := DefaultKeymap()
+	merged, err := ResolveKeymap(base, nil)
+	if err != nil {
+		t.Fatalf("ResolveKeymap() error = %v", err)
+	}
+	if len(merged) != len(base) {
+		t.Errorf("len(merged) = %d, want %d", len(merged), len(base))
+	}
+	for k, v := range base {
+		if merged[k] != v {
+			t.Errorf("merged[%q] = %q, want %q", k, merged[k], v)
+		}
+	}
+}

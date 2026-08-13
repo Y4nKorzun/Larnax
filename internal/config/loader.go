@@ -19,6 +19,10 @@ type tomlConfig struct {
 	Security  tomlSecurityConfig  `toml:"security"`
 	Generator tomlGeneratorConfig `toml:"generator"`
 	Backups   tomlBackupsConfig   `toml:"backups"`
+	// Keymap is spec section 21.3's override table — key string to
+	// action name — omitted entirely from the file when empty rather
+	// than written as an empty [keymap] section.
+	Keymap map[string]string `toml:"keymap,omitempty"`
 }
 
 type tomlUIConfig struct {
@@ -113,6 +117,7 @@ func toToml(c Config) tomlConfig {
 			Enabled:   c.Backups.Enabled,
 			Retention: c.Backups.Retention,
 		},
+		Keymap: c.Keymap,
 	}
 }
 
@@ -154,6 +159,7 @@ func fromToml(tc tomlConfig) (Config, error) {
 			Enabled:   tc.Backups.Enabled,
 			Retention: tc.Backups.Retention,
 		},
+		Keymap: tc.Keymap,
 	}, nil
 }
 

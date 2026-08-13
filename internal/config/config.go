@@ -9,12 +9,21 @@ import (
 	"time"
 )
 
-// Config mirrors spec section 21.1's example TOML shape.
+// Config mirrors spec section 21.1's example TOML shape, plus Keymap for
+// spec section 21.3's override support.
 type Config struct {
 	UI        UIConfig
 	Security  SecurityConfig
 	Generator GeneratorConfig
 	Backups   BackupsConfig
+	// Keymap holds spec section 21.3's user keybinding overrides as raw
+	// strings — canonical key string (e.g. "j", "<Leader>l") to action
+	// name (e.g. "down", "lock-vault") — rather than a typed
+	// map[string]tui.Action, so this package never has to import tui.
+	// Resolving these into an actual Keymap, including validating that
+	// every action name is real, is tui.ResolveKeymap's job. Nil means no
+	// overrides.
+	Keymap map[string]string
 }
 
 type UIConfig struct {

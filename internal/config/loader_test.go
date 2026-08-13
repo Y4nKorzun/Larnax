@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -20,8 +21,43 @@ func TestSaveThenLoadRoundTripsDefaultConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got != want {
+	// Config.Keymap is a map, so DeepEqual rather than == is required
+	// once any config carries one (Default's is nil either side, but
+	// this test's shape needs to keep working for any Config).
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() = %+v, want %+v", got, want)
+	}
+}
+
+func TestSaveThenLoadRoundTripsKeymapOverrides(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	want := Default()
+	want.Keymap = map[string]string{"q": "quit", "j": "down"}
+
+	if err := Save(path, want); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !reflect.DeepEqual(got.Keymap, want.Keymap) {
+		t.Errorf("Keymap = %v, want %v", got.Keymap, want.Keymap)
+	}
+}
+
+func TestSaveOmitsEmptyKeymapSection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := Save(path, Default()); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	if strings.Contains(string(data), "[keymap]") {
+		t.Errorf("saved TOML has an empty [keymap] section:\n%s", data)
 	}
 }
 
