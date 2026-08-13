@@ -67,6 +67,21 @@ func (v *Vault) AddEntry(entry Entry) error {
 	return nil
 }
 
+// UpdateEntry replaces the stored entry sharing updated.ID with updated in
+// full. updated.ParentGroup must reference an existing group — use
+// MoveEntry to change an entry's group along with other field updates in
+// a single call.
+func (v *Vault) UpdateEntry(updated Entry) error {
+	if _, ok := v.entries[updated.ID]; !ok {
+		return ErrEntryNotFound
+	}
+	if _, ok := v.groups[updated.ParentGroup]; !ok {
+		return ErrGroupNotFound
+	}
+	v.entries[updated.ID] = updated
+	return nil
+}
+
 // RemoveEntry deletes an entry outright. Recycle-bin semantics (spec
 // section 9.5) are an application-layer concern layered on top of this.
 func (v *Vault) RemoveEntry(id EntryID) error {

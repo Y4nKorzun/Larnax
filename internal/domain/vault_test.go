@@ -98,6 +98,51 @@ func TestAddLookupAndRemoveEntry(t *testing.T) {
 	}
 }
 
+func TestUpdateEntryReplacesStoredValue(t *testing.T) {
+	v := NewVault("test vault")
+	entry := NewEntry(v.RootGroupID(), "GitHub")
+	if err := v.AddEntry(entry); err != nil {
+		t.Fatalf("AddEntry() error = %v", err)
+	}
+
+	updated := entry
+	updated.Title = "GitHub (renamed)"
+	if err := v.UpdateEntry(updated); err != nil {
+		t.Fatalf("UpdateEntry() error = %v", err)
+	}
+
+	got, err := v.Entry(entry.ID)
+	if err != nil {
+		t.Fatalf("Entry() error = %v", err)
+	}
+	if got.Title != "GitHub (renamed)" {
+		t.Errorf("Title = %q, want %q", got.Title, "GitHub (renamed)")
+	}
+}
+
+func TestUpdateEntryRequiresExistingEntry(t *testing.T) {
+	v := NewVault("test vault")
+	unknown := NewEntry(v.RootGroupID(), "GitHub")
+
+	if err := v.UpdateEntry(unknown); !errors.Is(err, ErrEntryNotFound) {
+		t.Errorf("UpdateEntry() error = %v, want %v", err, ErrEntryNotFound)
+	}
+}
+
+func TestUpdateEntryRequiresExistingGroup(t *testing.T) {
+	v := NewVault("test vault")
+	entry := NewEntry(v.RootGroupID(), "GitHub")
+	if err := v.AddEntry(entry); err != nil {
+		t.Fatalf("AddEntry() error = %v", err)
+	}
+
+	moved := entry
+	moved.ParentGroup = NewGroupID() // a group that doesn't exist in v
+	if err := v.UpdateEntry(moved); !errors.Is(err, ErrGroupNotFound) {
+		t.Errorf("UpdateEntry() error = %v, want %v", err, ErrGroupNotFound)
+	}
+}
+
 func TestRemoveUnknownEntry(t *testing.T) {
 	v := NewVault("test vault")
 	if err := v.RemoveEntry(NewEntryID()); !errors.Is(err, ErrEntryNotFound) {
